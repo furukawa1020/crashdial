@@ -1,68 +1,50 @@
-﻿/**
- * M5Dial Encoder Test
- */
-#include <M5Unified.h>
+﻿#include <M5Dial.h>
 
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.println("\n\n=== M5DIAL ENCODER TEST ===");
   
-  M5.begin();
-  Serial.println("M5.begin() OK");
+  auto cfg = M5.config();
+  M5Dial.begin(cfg, true, false);
   
-  M5.Display.fillScreen(TFT_RED);
-  delay(500);
-  M5.Display.fillScreen(TFT_BLACK);
-  M5.Display.setTextColor(TFT_WHITE);
-  M5.Display.setTextSize(2);
-  M5.Display.setCursor(10, 60);
-  M5.Display.println("ENCODER TEST");
-  M5.Display.setCursor(10, 90);
-  M5.Display.println("Rotate dial!");
+  M5Dial.Display.fillScreen(TFT_RED);
+  delay(200);
+  M5Dial.Display.fillScreen(TFT_BLACK);
   
-  Serial.println("Display OK");
-  Serial.println("Rotate the dial now!\n");
+  M5Dial.Display.setTextColor(TFT_WHITE);
+  M5Dial.Display.setTextSize(2);
+  M5Dial.Display.setCursor(20, 80);
+  M5Dial.Display.println("M5DIAL");
+  M5Dial.Display.println("ENCODER TEST");
+  M5Dial.Display.println("Rotate dial!");
 }
 
 void loop() {
-  M5.update();
+  M5Dial.update();
   
   static int c = 0;
   c++;
   
-  // I2Cから4バイト読み取り（エンコーダ）
-  uint8_t data[4] = {0};
-  bool success = M5.In_I2C.readRegister(0x40, 0x10, data, 4, 400000);
+  static long last_encoder = -999;
+  long encoder_value = M5Dial.Encoder.read();
+  long delta = encoder_value - last_encoder;
   
-  // 全てのバイト組み合わせを計算
-  static int16_t last_val = 0;
-  int16_t val_bytes23 = (int16_t)((data[2] << 8) | data[3]);
-  int16_t val_bytes01 = (int16_t)((data[0] << 8) | data[1]);
-  int16_t val_bytes32 = (int16_t)((data[3] << 8) | data[2]);
-  int16_t val_bytes10 = (int16_t)((data[1] << 8) | data[0]);
-  int16_t delta = val_bytes23 - last_val;
-  
-  // 50回ごとに必ず画面更新
   if (c % 50 == 0 || delta != 0) {
-    M5.Display.fillRect(0, 120, 240, 120, TFT_BLACK);
-    M5.Display.setCursor(5, 120);
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(TFT_WHITE);
+    M5Dial.Display.fillRect(0, 140, 240, 100, TFT_BLACK);
+    M5Dial.Display.setCursor(10, 140);
+    M5Dial.Display.setTextSize(2);
+    M5Dial.Display.setTextColor(TFT_WHITE);
     
-    M5.Display.printf("Loop:%d I2C:%s\n", c, success?"OK":"FAIL");
-    M5.Display.printf("Raw: %02X %02X %02X %02X\n", data[0], data[1], data[2], data[3]);
-    M5.Display.printf("Val[2:3]: %d\n", val_bytes23);
-    M5.Display.printf("Val[0:1]: %d\n", val_bytes01);
-    M5.Display.printf("Val[3:2]: %d\n", val_bytes32);
-    M5.Display.printf("Val[1:0]: %d\n", val_bytes10);
+    M5Dial.Display.printf("Loop: %d\n", c);
+    M5Dial.Display.printf("Encoder: %ld\n", encoder_value);
     
     if (delta != 0) {
-      M5.Display.setTextColor(TFT_YELLOW);
-      M5.Display.printf(">>> DELTA=%d <<<", delta);
+      M5Dial.Display.setTextColor(TFT_YELLOW);
+      M5Dial.Display.printf("Delta: %ld\n", delta);
+      M5Dial.Display.setTextColor(TFT_GREEN);
+      M5Dial.Display.printf(">>> MOVING!");
+      last_encoder = encoder_value;
     }
-    
-    last_val = val_bytes23;
   }
   
   delay(20);
