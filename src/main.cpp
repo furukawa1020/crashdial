@@ -1,95 +1,65 @@
-/**
- * M5Dial Encoder Test - Minimal Debug Version
- * シリアル出力とエンコーダ読み取りのチE��チE
+﻿/**
+ * M5Dial Encoder Test
  */
-
 #include <M5Unified.h>
 
-int32_t encoderValue = 0;
-
 void setup() {
-  // シリアル初期化（最優先！E
   Serial.begin(115200);
-  delay(1000);  // シリアルポ�Eト安定化征E��
+  delay(500);
+  Serial.println("\n\n=== M5DIAL ENCODER TEST ===");
   
-  Serial.println("\n\n=== M5Dial Encoder Test ===");
-  Serial.println("Starting M5.begin()...");
+  M5.begin();
+  Serial.println("M5.begin() OK");
   
-  auto cfg = M5.config();
-  cfg.internal_imu = false;
-  cfg.external_imu = false;
-  M5.begin(cfg);
-  
-  Serial.println("M5.begin() OK!");
-  Serial.printf("Board: %d\n", (int)M5.getBoard());
-  
-  // I2Cスキャン
-  Serial.println("\n--- I2C Scan ---");
-  uint8_t testbuf[1];
-  for (uint8_t addr = 1; addr < 127; ++addr) {
-    if (M5.In_I2C.readRegister(addr, 0x00, testbuf, 1, 100000)) {
-      Serial.printf("Found device at 0x%02X\n", addr);
-    }
-    delay(2);
-  }
-  Serial.println("--- Scan done ---\n");
-  
-  // チE��スプレイ初期匁E
+  M5.Display.fillScreen(TFT_RED);
+  delay(500);
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextColor(TFT_WHITE);
   M5.Display.setTextSize(2);
-  M5.Display.setCursor(10, 10);
-  M5.Display.println("Encoder Test");
+  M5.Display.setCursor(10, 60);
+  M5.Display.println("ENCODER TEST");
+  M5.Display.setCursor(10, 90);
   M5.Display.println("Rotate dial!");
   
-  Serial.println("Setup complete. Rotate the dial now!\n");
+  Serial.println("Display OK");
+  Serial.println("Rotate the dial now!\n");
 }
 
 void loop() {
   M5.update();
   
-  // I2Cから4バイト読み取り
-  uint8_t data[4] = {0};
-  static int loopCount = 0;
-  loopCount++;
+  static int c = 0;
+  c++;
   
+  // I2Cから4バイト読み取り（エンコーダ）
+  uint8_t data[4] = {0};
   bool success = M5.In_I2C.readRegister(0x40, 0x10, data, 4, 400000);
   
-  if (success) {
-    // 全てのバイト絁E��合わせを表示
-    int16_t val01 = (int16_t)((data[0] << 8) | data[1]);
-    int16_t val10 = (int16_t)((data[1] << 8) | data[0]);
-    int16_t val23 = (int16_t)((data[2] << 8) | data[3]);
-    int16_t val32 = (int16_t)((data[3] << 8) | data[2]);
+  // 全てのバイト組み合わせを計算
+  static int16_t last_val = 0;
+  int16_t val_bytes23 = (int16_t)((data[2] << 8) | data[3]);
+  int16_t delta = val_bytes23 - last_val;
+  
+  // 30回ごと、または変化があったときに出力
+  if (c % 30 == 0 || delta != 0) {
+    Serial.printf("[%d] I2C:%s Raw:%02X %02X %02X %02X | Val=%d", 
+                  c, success?"OK":"FAIL", data[0], data[1], data[2], data[3], val_bytes23);
     
-    // 値の変化を検�E
-    static int16_t last_val23 = 0;
-    int16_t delta = val23 - last_val23;
+    if (delta != 0) {
+      Serial.printf(" <<< DELTA=%d", delta);
+      
+      // 画面更新
+      M5.Display.fillRect(10, 120, 220, 80, TFT_BLACK);
+      M5.Display.setCursor(10, 120);
+      M5.Display.setTextSize(2);
+      M5.Display.printf("Enc: %d\n", val_bytes23);
+      M5.Display.printf("Delta: %d\n", delta);
+      M5.Display.printf("Loop: %d", c);
+    }
+    Serial.println();
     
-    if (loopCount % 30 == 0 || delta != 0) {
-      Serial.printf("[%d] Raw: %02X %02X %02X %02X | ", loopCount, data[0], data[1], data[2], data[3]);
-      Serial.printf("[0:1]=%d [1:0]=%d [2:3]=%d [3:2]=%d", val01, val10, val23, val32);
-      
-      if (delta != 0) {
-        Serial.printf(" <<< DELTA=%d", delta);
-        
-        // 画面更新
-        M5.Display.fillRect(10, 60, 220, 100, TFT_BLACK);
-        M5.Display.setCursor(10, 60);
-        M5.Display.printf("Enc: %d\n", val23);
-        M5.Display.printf("Delta: %d\n", delta);
-        M5.Display.printf("Loop: %d", loopCount);
-      }
-      Serial.println();
-      
-      last_val23 = val23;
-    }
-  } else {
-    if (loopCount % 100 == 0) {
-      Serial.printf("[%d] I2C read FAILED\n", loopCount);
-    }
+    last_val = val_bytes23;
   }
   
-  delay(20);  // 50Hz更新
-
+  delay(20);
 }
