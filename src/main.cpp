@@ -147,6 +147,19 @@ void setup() {
   encoderValue = 0;
   lastEncoderValue = 0;
   Serial.println("Encoder OK");
+
+  // --- I2Cスキャン（デバッグ）: バス上のデバイスアドレスを列挙する
+  // 注意: M5.In_I2C は Wire API と完全互換でないため、readRegister を試して応答を検出する
+  Serial.println("I2C Scan start (using readRegister)...");
+  uint8_t testbuf[1];
+  for (uint8_t addr = 1; addr < 127; ++addr) {
+    // レジスタ0x00への1バイト読み取りを試す。成功すればデバイスありと見なす
+    if (M5.In_I2C.readRegister(addr, 0x00, testbuf, 1, 100000)) {
+      Serial.printf("I2C device found at 0x%02X\n", addr);
+    }
+    delay(2);
+  }
+  Serial.println("I2C Scan done");
   
   // 触覚モーター初期化（M5Dialは内蔵）
   
@@ -199,17 +212,42 @@ void updateEncoder() {
   // エンコーダー値読み取り（安全な実装）
   uint8_t reg_data[4] = {0};
   
+  // デバッグ: I2C通信試行
+  static int readAttempts = 0;
+  readAttempts++;
+  
   // I2C通信でエンコーダーの値を取得
   // M5Dialのエンコーダーは0x40アドレス、レジスタ0x10から4バイト読み取り
   bool success = false;
   
   // I2C通信を安全に実行
   if (M5.In_I2C.readRegister(0x40, 0x10, reg_data, 4, 400000)) {
-    // ビッグエンディアンで2バイト目と3バイト目を結合
-    int16_t newEncVal = (int16_t)((reg_data[2] << 8) | reg_data[3]);
-    encoderDelta = newEncVal - encoderValue;
-    encoderValue = newEncVal;
+    // 生データダンプ（デバッグ）
+    if (readAttempts % 50 == 0) {
+      Serial.printf("I2C raw: %02X %02X %02X %02X\n", reg_data[0], reg_data[1], reg_data[2], reg_data[3]);
+    }
+
+    // 解析: ビッグエンディアンとリトルエンディアン両方を試す
+    int16_t newEncVal_be = (int16_t)((reg_data[2] << 8) | reg_data[3]);
+    int16_t newEncVal_le = (int16_t)((reg_data[3] << 8) | reg_data[2]);
+    int32_t delta_be = newEncVal_be - encoderValue;
+    int32_t delta_le = newEncVal_le - encoderValue;
+
+    // デバッグ出力（頻度低め）
+    if (readAttempts % 100 == 0) {
+      Serial.printf("I2C OK: BE=%d LE=%d (use BE by default)\n", newEncVal_be, newEncVal_le);
+      Serial.printf("Delta BE=%d Delta LE=%d\n", (int)delta_be, (int)delta_le);
+    }
+
+    // まずは既存の仮定（ビッグエンディアン）を採用
+    encoderDelta = (int32_t)delta_be;
+    encoderValue = newEncVal_be;
     success = true;
+  } else {
+    // I2C通信失敗
+    if (readAttempts % 100 == 0) {
+      Serial.println("I2C FAILED!");
+    }
   }
   
   // I2C通信が失敗した場合はエンコーダー変化なしとする
@@ -218,6 +256,7 @@ void updateEncoder() {
   }
   
   if (encoderDelta != 0) {
+    Serial.printf(">>> DELTA DETECTED: %d, Dest before: %.2f\n", encoderDelta, destructionLevel);
     lastInteractionTime = millis();
     
     // 回転速度計算（-1.0 ~ 1.0）
@@ -225,6 +264,8 @@ void updateEncoder() {
     
     // 破壊進行度更新
     updateDestruction();
+    
+    Serial.printf(">>> Dest after: %.2f\n", destructionLevel);
     
     lastEncoderValue = encoderValue;
   } else {
@@ -380,6 +421,14 @@ void renderNormal() {
     uint32_t color = M5.Display.color565(brightness, brightness, brightness + 20);
     M5.Display.fillCircle(CENTER_X, CENTER_Y, 5, color);
   }
+  
+  // デバッグ表示
+  M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  M5.Display.setCursor(10, 10);
+  M5.Display.printf("Enc:%d D:%d", encoderValue, encoderDelta);
+  M5.Display.setCursor(10, 25);
+  M5.Display.printf("Dest:%.2f", destructionLevel);
 }
 
 // ========================================
