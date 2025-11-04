@@ -1,33 +1,32 @@
 /**
- * ESP32 Raw Test - M5Unified抜きで動作確認
+ * M5Dial Minimum Test - 最小限の動作確認
  */
 
-#include <Arduino.h>
+#include <M5Unified.h>
 
 void setup() {
-  // シリアル初期化
-  Serial.begin(115200);
-  delay(2000);
-  Serial.println("=== ESP32 RAW Test ===");
-  Serial.println("Setup starting...");
+  // M5Dial初期化
+  M5.begin();
   
-  delay(1000);
-  Serial.println("Setup complete!");
-  delay(1000);
-  Serial.println("Setup complete!");
+  // ディスプレイ設定
+  M5.Display.setRotation(0);
+  M5.Display.setBrightness(128);
+  M5.Display.fillScreen(TFT_RED);  // 赤で塗りつぶし
+  
+  delay(2000);
+  
+  // 黒背景に白い円
+  M5.Display.fillScreen(TFT_BLACK);
+  M5.Display.fillCircle(120, 120, 80, TFT_WHITE);
+  
+  // テキスト表示
+  M5.Display.setTextColor(TFT_GREEN);
+  M5.Display.setTextSize(3);
+  M5.Display.setCursor(70, 110);
+  M5.Display.println("M5Dial");
 }
 
 void loop() {
-  static unsigned long lastPrint = 0;
-  static int count = 0;
-  
-  // 1秒ごとにカウント表示
-  if (millis() - lastPrint > 1000) {
-    lastPrint = millis();
-    count++;
-    Serial.print("Loop running... count: ");
-    Serial.println(count);
-  }
-  
+  M5.update();
   delay(10);
 }
